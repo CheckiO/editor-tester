@@ -2,7 +2,8 @@
 
 SCRIPTPATH=$( cd "$( dirname "$BASH_SOURCE" )" && pwd )
 
-VOLUMES="-v $SCRIPTPATH/tests:/opt/project/tests"
+VOLUMES="-v $SCRIPTPATH/editor_tester:/opt/editor_tester"
+VOLUMES=$VOLUMES" -v $SCRIPTPATH/tests_data:/opt/tests_data"
 IMAGE="checkio/editor-tester"
 
 case "$1" in
@@ -10,8 +11,8 @@ case "$1" in
 echo "Build new image"
 docker build -t $IMAGE ./
 ;;
-'run-tests')
+'run')
 echo "Runing tests"
-docker run -i -t $VOLUMES $IMAGE
+docker run -i -t $VOLUMES $IMAGE $2 $3 $4
 ;;
 esac

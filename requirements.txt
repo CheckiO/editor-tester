@@ -1,1 +1,2 @@
-tornado
+coloredlogs==0.8
+websocket-client==0.31.0

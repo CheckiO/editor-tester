@@ -1,49 +1,58 @@
-FROM checkio/code-empire-dev-base
+FROM debian:jessie
 MAINTAINER Igor Lubimov <igor@checkio.org>
 
-ENV DB_NAME code_empire
+# remove several traces of debian python
+RUN apt-get purge -y python.*
 
-COPY root/.ssh /root/.ssh
-RUN chmod 400 /root/.ssh/*
+# http://bugs.python.org/issue19846
+# > At the moment, setting "LANG=C" on a Linux system *fundamentally breaks Python 3*, and that's not OK.
+ENV LANG C.UTF-8
 
-COPY requirements /opt/project/
-RUN pip-accel install -r /opt/project/back/development.txt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libsqlite3-0 \
+        libssl1.0.0 \
+    && rm -rf /var/lib/apt/lists/*
 
-# TODO: move to env
-RUN pip-accel install -r /opt/project/async/requirements.txt
+# gpg: key 18ADD4FF: public key "Benjamin Peterson <benjamin@python.org>" imported
+RUN gpg --keyserver ha.pool.sks-keyservers.net --recv-keys C01E1CAD5EA2C4F0B8E3571504C367C218ADD4FF
 
-RUN mkdir /opt/db && \
-    chown -R postgres /opt/db
-COPY dump.sql /opt/db/dump.sql
-USER postgres
-RUN /etc/init.d/postgresql start && \
-    psql $DB_NAME < /opt/db/dump.sql
+ENV PYTHON_VERSION 2.7.10
 
-USER root
-RUN rm -rf /opt/db/*
+# if this is called "PIP_VERSION", pip explodes with "ValueError: invalid truth value '<VERSION>'"
+ENV PYTHON_PIP_VERSION 7.0.1
 
-RUN rm -rf /etc/nginx/conf.d/*
-COPY etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
-COPY etc/nginx/conf.d/queue-monitor.conf /etc/nginx/conf.d/queue-monitor.conf
-COPY etc/nginx/conf.d/code-empire.conf /etc/nginx/conf.d/code-empire.conf
+RUN set -x \
+    && buildDeps='curl gcc libbz2-dev libc6-dev libsqlite3-dev libssl-dev make xz-utils zlib1g-dev' \
+    && apt-get update && apt-get install -y $buildDeps --no-install-recommends && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /usr/src/python \
+    && curl -SL "https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tar.xz" -o python.tar.xz \
+    && curl -SL "https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tar.xz.asc" -o python.tar.xz.asc \
+    && gpg --verify python.tar.xz.asc \
+    && tar -xJC /usr/src/python --strip-components=1 -f python.tar.xz \
+    && rm python.tar.xz* \
+    && cd /usr/src/python \
+    && ./configure --enable-shared --enable-unicode=ucs4 \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && curl -SL 'https://bootstrap.pypa.io/get-pip.py' | python2 \
+    && pip install --upgrade pip==$PYTHON_PIP_VERSION \
+    && find /usr/local \
+        \( -type d -a -name test -o -name tests \) \
+        -o \( -type f -a -name '*.pyc' -o -name '*.pyo' \) \
+        -exec rm -rf '{}' + \
+    && apt-get purge -y --auto-remove $buildDeps \
+    && rm -rf /usr/src/python
 
-COPY etc/apache2/ports.conf /etc/apache2/ports.conf
-COPY etc/apache2/sites-available/code-empire.conf /etc/apache2/sites-available/code-empire.conf
-RUN mkdir -p /etc/apache2/sites-enabled
-RUN ln -s /etc/apache2/sites-available/code-empire.conf /etc/apache2/sites-enabled/code-empire.conf
 
-COPY scripts/init.sh /opt/init.sh
-COPY scripts/init-django.sh /opt/init-django.sh
-COPY scripts/build-static.sh /opt/build-static.sh
-COPY scripts/backup-db.sh /opt/backup-db.sh
-RUN chmod 755 /opt/init.sh && \
-    chmod 755 /opt/init-django.sh && \
-    chmod 755 /opt/build-static.sh && \
-    chmod 755 /opt/backup-db.sh && \
-    useradd -G www-data -ms /bin/bash checkio
+RUN \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get remove xz-utils && \
+    apt-get autoremove -y && \
+    apt-get clean all
 
-VOLUME /var/lib/postgresql/9.4/main
+COPY requirements.txt /opt/
+RUN pip install -r /opt/requirements.txt
 
-EXPOSE 80 81 8888 5672 5432
-
-CMD ["/bin/bash", "/opt/init.sh"]
+ENTRYPOINT ["python", "/opt/editor_tester/app.py"]

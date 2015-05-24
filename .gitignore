@@ -52,4 +52,7 @@ docs/_build/
 
 # PyBuilder
 target/
-tests_data/
+tests_data/*
+!tests_data/__init__.py
+.idea/
+local.py

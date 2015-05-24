@@ -1,17 +1,21 @@
-from tornado.ioloop import IOLoop
+import argparse
+import logging
 
-from parser import get_missions
-from tests import test_mission_tests
+import coloredlogs
+
+from tests import Toster
+
+coloredlogs.install(show_name=False)
+logger = logging.getLogger(__file__)
 
 
-# ws://www.empireofcode.com/ws/main/?EIO=3&transport=websocket
 if __name__ == "__main__":
-    url = 'ws://www.empireofcode.com/ws/editor/'  # TODO: move to arg
+    parser = argparse.ArgumentParser(description='Command line mission tester')
+    parser.add_argument('-d', dest='domain', default='www.empireofcode.com',
+                        help='Example: www.empireofcode.com', required=True)
+    parser.add_argument('-s', dest='session_id', help='User session id from cookie', required=True)
+    parser.add_argument('-b', dest='basic', help='Basic auth key')
+    options = parser.parse_args()
 
-    io_loop = IOLoop.instance()
-
-    missions = get_missions()
-    for mission_tests in missions:
-        test_mission_tests(url, mission_tests)
-
-    io_loop.start()
+    toster = Toster(options.domain, options.session_id, options.basic)
+    toster.run_tests()
